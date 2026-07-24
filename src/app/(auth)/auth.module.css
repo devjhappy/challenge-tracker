@@ -1,0 +1,47 @@
+.authCard {
+  width: 100%;
+  max-width: 400px;
+  padding: 2rem;
+  text-align: center;
+}
+
+.title {
+  font-size: 2rem;
+  margin-bottom: 0.5rem;
+  color: var(--primary);
+  font-weight: 700;
+}
+
+.subtitle {
+  color: var(--text-light);
+  margin-bottom: 2rem;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  text-align: left;
+}
+
+.error {
+  color: #ef4444;
+  font-size: 0.875rem;
+  margin-top: 0.25rem;
+}
+
+.linkText {
+  margin-top: 1.5rem;
+  color: var(--text-light);
+  font-size: 0.875rem;
+}
+
+.link {
+  color: var(--primary);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.link:hover {
+  text-decoration: underline;
+}
