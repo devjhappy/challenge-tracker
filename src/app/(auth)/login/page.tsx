@@ -73,6 +73,9 @@ export default function LoginPage() {
       <p className={styles.linkText}>
         계정이 없으신가요? <Link href="/signup" className={styles.link}>회원가입</Link>
       </p>
+      <p className={styles.linkText} style={{ marginTop: '0.5rem' }}>
+        아직 활성화된 챌린지 트래커가 없으신가요? <Link href="/start" className={styles.link}>시작하기</Link>
+      </p>
     </div>
   );
 }

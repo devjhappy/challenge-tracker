@@ -3,8 +3,26 @@
 import React, { useState, useEffect, use } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { db, Room, User } from '@/utils/db';
+import { db, getGroup, Room, User } from '@/utils/db';
 import { auth } from '@/utils/auth';
+
+// 초대 링크: 그룹 키(토큰·DB)+룸 id를 URL 해시에 담음 — 받는 사람은 링크만 열고 가입하면 그룹 연결+룸 참여 완료.
+// 해시(#) 부분은 서버로 전송되지 않고, 링크를 아는 사람 = 그룹 키를 아는 사람(기존 키 공유와 동일한 신뢰 수준)
+function InviteLinkButton({ roomId }: { roomId: string }) {
+  const g = getGroup();
+  if (!g?.token || !g?.dbs) return null; // 기본 그룹(무쇠소녀단)은 키가 서버에만 있어 링크 발급 불가
+  const copy = () => {
+    const payload = { v: 1, n: g.name, t: g.token, d: g.dbs, p: g.pageId, r: roomId };
+    const hash = btoa(encodeURIComponent(JSON.stringify(payload)));
+    navigator.clipboard.writeText(`${location.origin}/join#${hash}`);
+    alert('초대 링크가 복사되었습니다! 링크를 열면 가입만 하고 바로 이 챌린지에 참여돼요.');
+  };
+  return (
+    <button type="button" onClick={copy} className="btn-secondary" style={{ marginTop: '0.5rem', width: '100%' }}>
+      🔗 초대 링크 복사 (그룹 연결 + 참여까지 한 번에)
+    </button>
+  );
+}
 
 export default function RoomSettingsPage({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter();
@@ -115,6 +133,7 @@ export default function RoomSettingsPage({ params }: { params: Promise<{ id: str
                 복사
               </button>
             </div>
+            <InviteLinkButton roomId={room.id} />
           </div>
 
           {isOwner && (
