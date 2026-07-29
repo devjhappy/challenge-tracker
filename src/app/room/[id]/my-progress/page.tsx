@@ -1,10 +1,11 @@
 "use client";
 
-import React, { useEffect, useState, use } from 'react';
+import React, { useEffect, useRef, useState, use } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { db, Room, User, Progress } from '@/utils/db';
+import { absFetch, db, Room, User, Progress } from '@/utils/db';
 import { auth } from '@/utils/auth';
+import { RecordShots } from '@/components/RecordShots';
 
 export default function MyProgressPage({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter();
@@ -15,6 +16,34 @@ export default function MyProgressPage({ params }: { params: Promise<{ id: strin
   const [room, setRoom] = useState<Room | null>(null);
   const [progress, setProgress] = useState<Progress[]>([]);
   const [note, setNote] = useState('');
+  const [openRecordId, setOpenRecordId] = useState<string | null>(null); // 최근 기록 펼침
+  const [shotBusy, setShotBusy] = useState(false);
+  const [shotMsg, setShotMsg] = useState('');
+  const [shotsVersion, setShotsVersion] = useState(0); // 업로드 후 인증샷 재조회 트리거
+  const shotFileRef = useRef<HTMLInputElement>(null);
+
+  const handleShotUpload = async (file: File) => {
+    if (!user || shotBusy) return;
+    setShotBusy(true);
+    setShotMsg('');
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      fd.append('user', user.id);
+      fd.append('date', new Date().toISOString().split('T')[0]);
+      fd.append('room', roomId);
+      const res = await absFetch('/api/notion/shot', { method: 'POST', body: fd });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.error || `HTTP ${res.status}`);
+      setShotMsg('✅ 인증샷 업로드 완료! 노션·위젯에도 반영돼요 (+2XP·+5코인)');
+      setShotsVersion(v => v + 1);
+    } catch (e) {
+      setShotMsg(`❌ 업로드 실패: ${e instanceof Error ? e.message : e}`);
+    } finally {
+      setShotBusy(false);
+      if (shotFileRef.current) shotFileRef.current.value = '';
+    }
+  };
 
   useEffect(() => {
     const currentUser = auth.getCurrentUser();
@@ -108,23 +137,59 @@ export default function MyProgressPage({ params }: { params: Promise<{ id: strin
           </div>
         )}
 
+        <div style={{ marginTop: '1.5rem' }}>
+          <input
+            ref={shotFileRef}
+            type="file"
+            accept="image/*"
+            style={{ display: 'none' }}
+            onChange={e => { const f = e.target.files?.[0]; if (f) void handleShotUpload(f); }}
+          />
+          <button
+            className="btn-secondary"
+            disabled={shotBusy}
+            onClick={() => shotFileRef.current?.click()}
+            style={{ padding: '0.5rem 1.25rem' }}
+          >
+            {shotBusy ? '업로드 중...' : '📸 오늘 인증샷 올리기'}
+          </button>
+          {shotMsg && <p style={{ marginTop: '0.5rem', fontSize: '0.85rem', color: shotMsg.startsWith('✅') ? 'var(--primary)' : '#ef4444' }}>{shotMsg}</p>}
+        </div>
+
         <div style={{ marginTop: '3rem', textAlign: 'left', borderTop: '1px solid #e5e7eb', paddingTop: '2rem' }}>
           <h3 style={{ fontSize: '1.25rem', marginBottom: '1rem' }}>나의 최근 기록</h3>
           {progress.length === 0 ? (
             <p style={{ color: 'var(--text-light)' }}>아직 완료 기록이 없습니다. 오늘 첫 기록을 남겨보세요!</p>
           ) : (
             <ul style={{ listStyle: 'none', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-              {progress.sort((a,b) => new Date(b.record_date).getTime() - new Date(a.record_date).getTime()).map(p => (
-                <li key={p.id} style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', padding: '1rem', backgroundColor: 'var(--white)', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontWeight: '600' }}>{p.record_date}</span>
-                    <span style={{ color: p.is_completed ? 'var(--primary)' : 'var(--text-light)', fontWeight: 'bold' }}>
-                      {p.is_completed ? '✅ 완료' : '❌ 미완료'}
-                    </span>
-                  </div>
-                  {p.note && <p style={{ color: 'var(--text-dark)', fontSize: '0.9rem', backgroundColor: 'var(--bg-color)', padding: '0.75rem', borderRadius: '6px' }}>{p.note}</p>}
-                </li>
-              ))}
+              {progress.sort((a,b) => new Date(b.record_date).getTime() - new Date(a.record_date).getTime()).map(p => {
+                const isOpen = openRecordId === p.id;
+                return (
+                  <li
+                    key={p.id}
+                    onClick={() => setOpenRecordId(isOpen ? null : p.id)}
+                    style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', padding: '1rem', backgroundColor: 'var(--white)', borderRadius: '8px', border: isOpen ? '1px solid var(--primary)' : '1px solid #e5e7eb', cursor: 'pointer' }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontWeight: '600' }}>{p.record_date}</span>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <span style={{ color: p.is_completed ? 'var(--primary)' : 'var(--text-light)', fontWeight: 'bold' }}>
+                          {p.is_completed ? '✅ 완료' : '❌ 미완료'}
+                        </span>
+                        <span style={{ color: 'var(--text-light)', fontSize: '0.8rem' }}>{isOpen ? '▲' : '▼'}</span>
+                      </span>
+                    </div>
+                    {isOpen && (
+                      <>
+                        <p style={{ color: 'var(--text-dark)', fontSize: '0.9rem', backgroundColor: 'var(--bg-color)', padding: '0.75rem', borderRadius: '6px' }}>
+                          {p.note || '📱 위젯/노션에서 인증한 기록이에요 (메모 없음)'}
+                        </p>
+                        <RecordShots key={`${p.id}-${shotsVersion}`} userId={p.user_id} date={p.record_date} roomId={roomId} />
+                      </>
+                    )}
+                  </li>
+                );
+              })}
             </ul>
           )}
         </div>

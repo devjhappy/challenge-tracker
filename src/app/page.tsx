@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { db, Room, User, Progress } from '@/utils/db';
 import { auth } from '@/utils/auth';
 import { startOfMonth, endOfMonth, eachDayOfInterval, format, isSameDay } from 'date-fns';
+import { RecordShots } from '@/components/RecordShots';
 
 export default function Home() {
   const router = useRouter();
@@ -16,6 +17,7 @@ export default function Home() {
   // Modal state
   const [selectedDateStr, setSelectedDateStr] = useState<string | null>(null);
   const [selectedRoomIds, setSelectedRoomIds] = useState<string[]>([]);
+  const [openRecordKey, setOpenRecordKey] = useState<string | null>(null); // 모달 내 기록 펼침 (`${date}:${roomId}`)
 
   useEffect(() => {
     const currentUser = auth.getCurrentUser();
@@ -116,26 +118,28 @@ export default function Home() {
             const activeRoomIds = activeRooms.map(r => r.id);
             const dayProgress = allProgress.filter(p => p.record_date === dateStr && p.is_completed && activeRoomIds.includes(p.room_id));
             const successCount = dayProgress.length;
-            
-            const failCount = activeRooms.length - successCount;
-            
+
             // Only show stats if the day is not in the future or if there is progress
             const isFuture = day > today;
             const hasStats = !isFuture || successCount > 0;
             const isToday = isSameDay(day, today);
+            // 히트맵: 그날 완료한 룸 비율만큼 초록 농도
+            const ratio = hasStats && activeRooms.length > 0 ? successCount / activeRooms.length : 0;
+            const heatColor = ratio > 0 ? `rgba(74, 222, 128, ${0.3 + 0.6 * ratio})` : 'var(--white)';
 
             return (
-              <div 
-                key={dateStr} 
+              <div
+                key={dateStr}
                 onClick={() => hasStats && setSelectedDateStr(dateStr)}
+                title={hasStats && activeRooms.length > 0 ? `완료 ${successCount}/${activeRooms.length}` : undefined}
                 style={{
                   aspectRatio: '1',
                   display: 'flex',
                   flexDirection: 'column',
                   justifyContent: 'center',
                   alignItems: 'center',
-                  backgroundColor: 'var(--white)',
-                  color: 'var(--text-dark)',
+                  backgroundColor: heatColor,
+                  color: ratio > 0.5 ? 'white' : 'var(--text-dark)',
                   borderRadius: '12px',
                   border: isToday ? '2px solid var(--primary)' : '1px solid #e5e7eb',
                   opacity: isFuture && successCount === 0 ? 0.5 : 1,
@@ -157,12 +161,6 @@ export default function Home() {
                 }}
               >
                 <span style={{ fontSize: '1.25rem', fontWeight: '500' }}>{format(day, 'd')}</span>
-                {hasStats && activeRooms.length > 0 && (
-                  <div style={{ display: 'flex', gap: '0.5rem', fontSize: '0.75rem', marginTop: '4px', fontWeight: 'bold' }}>
-                    <span style={{ color: 'var(--primary)' }}>O {successCount}</span>
-                    <span style={{ color: '#ef4444' }}>X {failCount}</span>
-                  </div>
-                )}
               </div>
             );
           })}
@@ -232,10 +230,26 @@ export default function Home() {
                 <ul style={{ listStyle: 'none', padding: 0, display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                   {successfulRooms.map(room => {
                     const record = selectedDateProgress.find(p => p.room_id === room.id);
+                    const recordKey = `${selectedDateStr}:${room.id}`;
+                    const isOpen = openRecordKey === recordKey;
                     return (
-                      <li key={room.id} style={{ padding: '1rem', backgroundColor: 'var(--bg-color)', borderRadius: '8px', border: '1px solid #4ade80' }}>
-                        <div style={{ fontWeight: 'bold' }}>{room.name}</div>
-                        {record?.note && <div style={{ fontSize: '0.9rem', color: 'var(--text-dark)', marginTop: '0.5rem' }}>메모: {record.note}</div>}
+                      <li
+                        key={room.id}
+                        onClick={() => setOpenRecordKey(isOpen ? null : recordKey)}
+                        style={{ padding: '1rem', backgroundColor: 'var(--bg-color)', borderRadius: '8px', border: '1px solid #4ade80', cursor: 'pointer' }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ fontWeight: 'bold' }}>{room.name}</span>
+                          <span style={{ color: 'var(--text-light)', fontSize: '0.8rem' }}>{isOpen ? '▲' : '▼'}</span>
+                        </div>
+                        {isOpen && user && (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginTop: '0.75rem' }}>
+                            <p style={{ fontSize: '0.9rem', color: 'var(--text-dark)', backgroundColor: 'var(--white)', padding: '0.75rem', borderRadius: '6px', margin: 0 }}>
+                              {record?.note || '📱 위젯/노션에서 인증한 기록이에요 (메모 없음)'}
+                            </p>
+                            <RecordShots userId={user.id} date={selectedDateStr} roomId={room.id} />
+                          </div>
+                        )}
                       </li>
                     );
                   })}

@@ -11,6 +11,7 @@ import bcrypt from 'bcryptjs';
 export default function SignupPage() {
   const router = useRouter();
   const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
@@ -35,7 +36,8 @@ export default function SignupPage() {
     const newUser = {
       id: crypto.randomUUID(),
       username,
-      password_hash: hash
+      password_hash: hash,
+      email: email.trim() || undefined
     };
 
     db.users.create(newUser);
@@ -58,6 +60,17 @@ export default function SignupPage() {
             value={username}
             onChange={(e) => setUsername(e.target.value)}
             placeholder="아이디를 입력하세요"
+          />
+        </div>
+
+        <div className="form-group">
+          <label className="form-label">이메일 (선택 — 이메일로도 로그인 가능)</label>
+          <input
+            type="email"
+            className="input-field"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="me@example.com"
           />
         </div>
 

@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { db, Room, User, Progress, Comment } from '@/utils/db';
 import { auth } from '@/utils/auth';
-import { startOfMonth, endOfMonth, eachDayOfInterval, format, isSameDay, startOfWeek, addWeeks, parseISO, endOfWeek } from 'date-fns';
+import { startOfMonth, endOfMonth, eachDayOfInterval, format, isSameDay, startOfWeek, addWeeks, addMonths, parseISO, endOfWeek } from 'date-fns';
 
 export default function RoomDashboardPage({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter();
@@ -19,6 +19,7 @@ export default function RoomDashboardPage({ params }: { params: Promise<{ id: st
   const [allComments, setAllComments] = useState<Comment[]>([]);
   const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
   const [newComment, setNewComment] = useState<{ [key: string]: string }>({});
+  const [weeklyMonth, setWeeklyMonth] = useState(() => startOfMonth(new Date())); // 주차별 현황 월 페이징
 
   useEffect(() => {
     const currentUser = auth.getCurrentUser();
@@ -184,9 +185,14 @@ export default function RoomDashboardPage({ params }: { params: Promise<{ id: st
                   }
                 }
 
+                const completedNames = dayCompletions
+                  .map(p => members.find(m => m.user_id === p.user_id)?.username || '멤버')
+                  .join(', ');
+
                 return (
                   <div
                     key={dateStr}
+                    title={completedNames || undefined}
                     style={{
                       aspectRatio: '1',
                       display: 'flex',
@@ -202,15 +208,15 @@ export default function RoomDashboardPage({ params }: { params: Promise<{ id: st
                   >
                     <span style={{ fontSize: '1.25rem', fontWeight: '500' }}>{format(day, 'd')}</span>
                     {completionsForDay > 0 && (
-                      <div style={{ fontSize: '0.7rem', marginTop: '2px', display: 'flex', flexDirection: 'column', gap: '2px', alignItems: 'center', width: '100%' }}>
-                        {allProgress
-                          .filter(p => p.record_date === dateStr && p.is_completed && (selectedUserIds.length === 0 || selectedUserIds.includes(p.user_id)))
+                      <div style={{ fontSize: '0.55rem', lineHeight: 1.2, marginTop: '1px', display: 'flex', flexWrap: 'wrap', gap: '1px', justifyContent: 'center', width: '100%', maxHeight: '2.4em', overflow: 'hidden' }}>
+                        {dayCompletions
+                          .filter(p => selectedUserIds.length === 0 || selectedUserIds.includes(p.user_id))
                           .slice(0, 2).map(p => {
                             const memberName = members.find(m => m.user_id === p.user_id)?.username || '멤버';
-                            return <span key={p.id} style={{ backgroundColor: 'rgba(0,0,0,0.15)', padding: '2px 4px', borderRadius: '4px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '90%' }}>{memberName}</span>
+                            return <span key={p.id} style={{ backgroundColor: 'rgba(0,0,0,0.12)', padding: '0 3px', borderRadius: '3px', whiteSpace: 'nowrap' }}>{memberName}</span>
                           })
                         }
-                        {completionsForDay > 2 && <span style={{ fontSize: '0.65rem', fontWeight: 'bold' }}>+{completionsForDay - 2}</span>}
+                        {completionsForDay > 2 && <span style={{ fontWeight: 'bold' }}>+{completionsForDay - 2}</span>}
                       </div>
                     )}
                   </div>
@@ -221,7 +227,28 @@ export default function RoomDashboardPage({ params }: { params: Promise<{ id: st
 
           {/* 주차별 현황판 */}
           <section className="glass-panel" style={{ padding: '2rem', marginBottom: '2rem' }}>
-            <h2 style={{ fontSize: '1.5rem', marginBottom: '1.5rem' }}>📊 주차별 달성 현황</h2>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+              <h2 style={{ fontSize: '1.5rem', margin: 0 }}>📊 주차별 달성 현황</h2>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                <button
+                  className="btn-secondary"
+                  style={{ padding: '0.25rem 0.75rem' }}
+                  disabled={weeklyMonth <= startOfMonth(week1Start)}
+                  onClick={() => setWeeklyMonth(addMonths(weeklyMonth, -1))}
+                >
+                  ◀
+                </button>
+                <span style={{ fontWeight: 'bold', minWidth: '7rem', textAlign: 'center' }}>{format(weeklyMonth, 'yyyy년 M월')}</span>
+                <button
+                  className="btn-secondary"
+                  style={{ padding: '0.25rem 0.75rem' }}
+                  disabled={weeklyMonth >= startOfMonth(today)}
+                  onClick={() => setWeeklyMonth(addMonths(weeklyMonth, 1))}
+                >
+                  ▶
+                </button>
+              </div>
+            </div>
             <div style={{ overflowX: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'center' }}>
                 <thead>
@@ -237,6 +264,8 @@ export default function RoomDashboardPage({ params }: { params: Promise<{ id: st
                     const weekEnd = endOfWeek(weekStart, { weekStartsOn: 1 });
                     const isFutureWeek = weekStart > today;
                     if (isFutureWeek) return null;
+                    // 월 페이징: 선택 월과 겹치는 주만 표시 (주차 번호는 전체 기준 유지)
+                    if (weekEnd < weeklyMonth || weekStart > endOfMonth(weeklyMonth)) return null;
 
                     return (
                       <tr key={index} style={{ borderBottom: '1px solid #e5e7eb' }}>
@@ -256,7 +285,7 @@ export default function RoomDashboardPage({ params }: { params: Promise<{ id: st
 
                           return (
                             <td key={m.user_id} style={{ padding: '1rem', fontSize: '1.5rem' }}>
-                              {isSuccess ? '⭕' : '❌'}
+                              <span style={{ color: isSuccess ? '#16a34a' : '#f43f5e', fontWeight: 'bold' }}>{isSuccess ? '○' : '✕'}</span>
                               <div style={{ fontSize: '0.8rem', color: 'var(--text-light)', marginTop: '4px' }}>
                                 ({completionsThisWeek}/{room.weekly_goal})
                               </div>
