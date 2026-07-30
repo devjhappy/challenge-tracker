@@ -3,7 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { NotionBridge } from "@/components/NotionBridge";
 import { NavBar } from "@/components/NavBar";
-import { GroupGate } from "@/components/GroupGate";
+
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -27,7 +27,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={`${geistSans.variable} ${geistMono.variable}`}>
-      <body><GroupGate><NotionBridge><NavBar />{children}</NotionBridge></GroupGate></body>
+      <body><NotionBridge><NavBar />{children}</NotionBridge></body>
     </html>
   );
 }

@@ -2,7 +2,7 @@
 
 // 그룹(테넌트) 게이트 — 로그인보다 먼저, 이 기기가 어느 챌린지 그룹(노션)에 붙을지 결정.
 // 그룹 키(토큰+DB ids)는 이 브라우저 localStorage에만 저장된다.
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { getGroup, setGroup, type GroupConfig } from '@/utils/db';
@@ -11,12 +11,22 @@ type Mode = 'select' | 'connect';
 
 export function GroupGate({ children }: { children: React.ReactNode }): React.ReactNode {
   const pathname = usePathname();
-  const [group, setGroupState] = useState<GroupConfig | null>(() => (typeof window === 'undefined' ? null : getGroup()));
+  const [mounted, setMounted] = useState(false);
+  const [group, setGroupState] = useState<GroupConfig | null>(null);
   const [mode, setMode] = useState<Mode>('select');
   const [token, setToken] = useState('');
   const [page, setPage] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    setGroupState(getGroup());
+    setMounted(true);
+  }, []);
+
+  if (!mounted) {
+    return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', opacity: 0.6 }}>불러오는 중...</div>;
+  }
 
   if (group || pathname === '/start' || pathname === '/join') return children; // /start·/join은 그룹 연결 자체를 하는 화면
 

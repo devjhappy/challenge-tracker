@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { db, Room, User, Progress, Comment } from '@/utils/db';
 import { auth } from '@/utils/auth';
 import { startOfMonth, endOfMonth, eachDayOfInterval, format, isSameDay, startOfWeek, addWeeks, addMonths, parseISO, endOfWeek } from 'date-fns';
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 
 export default function RoomDashboardPage({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter();
@@ -91,6 +92,26 @@ export default function RoomDashboardPage({ params }: { params: Promise<{ id: st
     curr = addWeeks(curr, 1);
   }
 
+  // Weight logic
+  const myWeightRecords = room.is_diet
+    ? allProgress
+      .filter(p => p.user_id === user.id && p.weight !== undefined)
+      .sort((a, b) => a.record_date.localeCompare(b.record_date))
+      .map(p => ({ date: p.record_date.substring(5).replace('-', '/'), weight: p.weight }))
+    : [];
+
+  let weightDiffText = '';
+  if (myWeightRecords.length > 1) {
+    const firstW = myWeightRecords[0].weight!;
+    const lastW = myWeightRecords[myWeightRecords.length - 1].weight!;
+    const diff = lastW - firstW;
+    if (diff > 0) weightDiffText = `${diff.toFixed(1)}kg 증가했습니다`;
+    else if (diff < 0) weightDiffText = `${Math.abs(diff).toFixed(1)}kg 감량했습니다! 🎉`;
+    else weightDiffText = '체중이 유지되고 있습니다.';
+  } else if (myWeightRecords.length === 1) {
+    weightDiffText = '오늘부터 체중 기록 시작!';
+  }
+
   return (
     <div className="container" style={{ paddingTop: '3rem' }}>
       <header style={{ marginBottom: '2rem' }}>
@@ -101,9 +122,11 @@ export default function RoomDashboardPage({ params }: { params: Promise<{ id: st
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '0.5rem' }}>
               <h1 style={{ fontSize: '2.5rem', color: 'var(--primary)', margin: 0 }}>{room.name}</h1>
-              <Link href={`/room/${room.id}/settings`} className="btn-secondary" style={{ padding: '0.25rem 0.75rem', fontSize: '0.875rem' }}>
-                ⚙️ 설정
-              </Link>
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <Link href={`/room/${room.id}/settings`} className="btn-secondary" style={{ padding: '0.25rem 0.75rem', fontSize: '0.875rem' }}>
+                  ⚙️ 설정
+                </Link>
+              </div>
             </div>
             <p style={{ color: 'var(--text-light)', fontSize: '1.125rem' }}>{room.description}</p>
             <p style={{ marginTop: '0.5rem', fontSize: '0.875rem', color: 'var(--text-dark)' }}>
@@ -150,10 +173,10 @@ export default function RoomDashboardPage({ params }: { params: Promise<{ id: st
               </div>
             )}
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '0.5rem', textAlign: 'center', fontWeight: 'bold', marginBottom: '1rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', gap: '0.5rem', textAlign: 'center', fontWeight: 'bold', marginBottom: '1rem' }}>
               <div>일</div><div>월</div><div>화</div><div>수</div><div>목</div><div>금</div><div>토</div>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '0.5rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', gap: '0.5rem' }}>
               {Array.from({ length: start.getDay() }).map((_, i) => <div key={`empty-${i}`} />)}
 
               {daysInMonth.map(day => {
@@ -249,7 +272,7 @@ export default function RoomDashboardPage({ params }: { params: Promise<{ id: st
                 </button>
               </div>
             </div>
-            <div style={{ overflowX: 'auto' }}>
+            <div className="table-responsive">
               <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'center' }}>
                 <thead>
                   <tr style={{ backgroundColor: 'var(--bg-color)' }}>
@@ -364,6 +387,36 @@ export default function RoomDashboardPage({ params }: { params: Promise<{ id: st
         </main>
 
         <aside>
+          {room.is_diet && (
+            <section className="glass-panel" style={{ padding: '2rem', marginBottom: '2rem' }}>
+              <h2 style={{ fontSize: '1.5rem', marginBottom: '1rem', color: 'var(--text-dark)' }}>⚖️ 나의 체중 변화</h2>
+              {myWeightRecords.length > 0 ? (
+                <>
+                  <p style={{ fontWeight: 'bold', fontSize: '1.1rem', color: 'var(--primary)', marginBottom: '1.5rem', textAlign: 'center' }}>
+                    {weightDiffText}
+                  </p>
+                  <div style={{ width: '100%', height: '200px' }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={myWeightRecords}>
+                        <XAxis dataKey="date" fontSize={12} tickMargin={10} />
+                        <YAxis domain={['dataMin - 2', 'dataMax + 2']} fontSize={12} width={30} />
+                        <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }} />
+                        <Line type="monotone" dataKey="weight" stroke="var(--primary)" strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 6 }} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <p style={{ fontSize: '0.8rem', color: 'var(--text-light)', textAlign: 'center', marginTop: '1rem' }}>
+                    * 체중 정보는 본인에게만 보입니다.
+                  </p>
+                </>
+              ) : (
+                <p style={{ textAlign: 'center', color: 'var(--text-light)', padding: '1rem 0' }}>
+                  아직 체중 기록이 없습니다.
+                </p>
+              )}
+            </section>
+          )}
+
           <section className="glass-panel" style={{ padding: '2rem', marginBottom: '2rem' }}>
             <h2 style={{ fontSize: '1.5rem', marginBottom: '1.5rem', color: 'var(--text-dark)' }}>🏆 명예의 전당 (랭킹)</h2>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>

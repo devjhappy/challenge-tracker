@@ -16,10 +16,12 @@ export default function MyProgressPage({ params }: { params: Promise<{ id: strin
   const [room, setRoom] = useState<Room | null>(null);
   const [progress, setProgress] = useState<Progress[]>([]);
   const [note, setNote] = useState('');
+  const [weight, setWeight] = useState<string>('');
   const [openRecordId, setOpenRecordId] = useState<string | null>(null); // 최근 기록 펼침
   const [shotBusy, setShotBusy] = useState(false);
   const [shotMsg, setShotMsg] = useState('');
   const [shotsVersion, setShotsVersion] = useState(0); // 업로드 후 인증샷 재조회 트리거
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const shotFileRef = useRef<HTMLInputElement>(null);
 
   const handleShotUpload = async (file: File) => {
@@ -75,6 +77,11 @@ export default function MyProgressPage({ params }: { params: Promise<{ id: strin
       return;
     }
 
+    if (room.requires_photo && !selectedFile) {
+      alert('이 챌린지는 인증샷 업로드가 필수입니다! 사진을 첨부해 주세요.');
+      return;
+    }
+
     const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
     const existing = progress.find(p => p.record_date === today);
     
@@ -84,13 +91,21 @@ export default function MyProgressPage({ params }: { params: Promise<{ id: strin
       user_id: user.id,
       record_date: today,
       is_completed: true,
-      note: note.trim()
+      note: note.trim(),
+      ...(room.is_diet && weight ? { weight: parseFloat(weight) } : {})
     };
 
     db.progress.record(newRecord);
     // Refresh progress state
     setProgress(db.progress.getByRoomAndUser(room.id, user.id));
     setNote('');
+    setWeight('');
+    
+    if (selectedFile) {
+      void handleShotUpload(selectedFile).then(() => {
+        setSelectedFile(null);
+      });
+    }
   };
 
   if (!user || !room) return null;
@@ -122,12 +137,37 @@ export default function MyProgressPage({ params }: { params: Promise<{ id: strin
               onChange={e => setNote(e.target.value)}
               style={{ width: '100%', maxWidth: '500px' }}
             />
+            {room.is_diet && (
+              <input
+                type="number"
+                step="0.1"
+                className="input-field"
+                placeholder="오늘의 체중 (kg) - 나에게만 보입니다"
+                value={weight}
+                onChange={e => setWeight(e.target.value)}
+                style={{ width: '100%', maxWidth: '500px' }}
+              />
+            )}
+            <div style={{ width: '100%', maxWidth: '500px', textAlign: 'left' }}>
+              <label className="form-label">
+                📸 인증샷 첨부 {room.requires_photo ? '(필수)' : '(선택)'}
+              </label>
+              <input
+                type="file"
+                accept="image/*"
+                required={room.requires_photo}
+                className="input-field"
+                onChange={e => setSelectedFile(e.target.files?.[0] || null)}
+                style={{ backgroundColor: 'var(--white)' }}
+              />
+            </div>
             <button 
               type="submit"
+              disabled={shotBusy}
               className="btn-primary" 
               style={{ fontSize: '1.25rem', padding: '0.75rem 2rem', width: '100%', maxWidth: '500px' }}
             >
-              기록하고 완료하기
+              {shotBusy ? '기록 및 업로드 중...' : '기록하고 완료하기'}
             </button>
           </form>
         ) : (

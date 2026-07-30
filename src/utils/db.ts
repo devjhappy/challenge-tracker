@@ -1,8 +1,9 @@
+import { supabase } from './supabase';
+
 // Notion 백엔드 위의 write-through 캐시 계층.
-// 인터페이스는 기존 localStorage 목 DB와 100% 동일 (페이지 코드 무수정) —
-//  읽기: localStorage 캐시(동기), NotionBridge가 스냅샷(/api/notion/snapshot)으로 주기 갱신
-//  쓰기: 캐시에 낙관 반영(동기) + 아웃박스 큐 → API 라우트로 전송(비동기, 실패 시 다음 동기화 때 재시도)
-// 상세: 볼트 AKIS-SELF/ABS/설계/12_웹_Notion_이관_설계.md
+// 메인 DB를 Supabase로 변경하고, Notion은 개인 백업(대시보드) 용도로만 비동기 큐를 통해 쏩니다.
+// 읽기: Supabase 실시간 동기화 -> localStorage 캐시
+// 쓰기: Supabase 비동기 기록 + Notion outbox queue
 
 export interface User {
   id: string;
@@ -20,6 +21,8 @@ export interface Room {
   weekly_goal: number;
   invite_code: string;
   created_by: string;
+  is_diet?: boolean;
+  requires_photo?: boolean;
 }
 
 export interface RoomMember {
@@ -35,6 +38,7 @@ export interface Progress {
   record_date: string; // YYYY-MM-DD
   is_completed: boolean;
   note: string; // User's detailed record
+  weight?: number; // Optional weight for diet challenges
 }
 
 export interface Comment {
@@ -145,25 +149,42 @@ async function flushOutbox(): Promise<void> {
   }
 }
 
-/* ── Notion 스냅샷 동기화 — NotionBridge(레이아웃)가 호출 ── */
+/* ── Supabase 스냅샷 동기화 — NotionBridge(레이아웃)가 호출 ── */
 export async function notionSync(): Promise<boolean> {
   if (typeof window === 'undefined') return false;
   await flushOutbox();
   try {
-    const res = await absFetch('/api/notion/snapshot', { cache: 'no-store' });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const snap = await res.json();
-    // 아웃박스가 남아 있으면(미전송 쓰기) 스냅샷이 그 쓰기를 아직 모름 — 캐시를 덮지 않고 보류
-    if (getStored<OutboxEntry>(OUTBOX_KEY).length > 0) return false;
-    setStored('users', snap.users);
-    setStored('rooms', snap.rooms);
-    setStored('room_members', snap.room_members);
-    setStored('progress', snap.progress);
-    setStored('comments', snap.comments);
+    const [
+      { data: profiles },
+      { data: rooms },
+      { data: room_members },
+      { data: progress }
+    ] = await Promise.all([
+      supabase.from('profiles').select('*'),
+      supabase.from('rooms').select('*'),
+      supabase.from('room_members').select('*'),
+      supabase.from('progress').select('*')
+    ]);
+
+    const mappedUsers = (profiles || []).map(p => ({
+      id: p.id,
+      username: p.username,
+      password_hash: '',
+      email: ''
+    }));
+
+    setStored('users', mappedUsers);
+    setStored('rooms', rooms || []);
+    setStored('room_members', room_members || []);
+    setStored('progress', progress || []);
+    
+    // Comments removed from supabase to keep it simple, but we leave the cache array
+    setStored('comments', getStored('comments') || []);
+    
     window.dispatchEvent(new Event('abs:synced'));
     return true;
   } catch (e) {
-    console.error('[abs] notion sync failed (using cached data):', e);
+    console.error('[abs] supabase sync failed:', e);
     return false;
   }
 }
@@ -174,10 +195,10 @@ export const db = {
   users: {
     getAll: () => getStored<User>('users'),
     create: (user: User) => {
+      // Supabase Auth가 처리하므로 여기선 캐시만 갱신 (더 이상 Notion API users 호출 안 함)
       const users = db.users.getAll();
       users.push(user);
       setStored('users', users);
-      enqueue('/api/notion/users', user);
     },
     findByUsername: (username: string) => {
       const q = username.trim().toLowerCase();
@@ -191,6 +212,20 @@ export const db = {
       const rooms = db.rooms.getAll();
       rooms.push(room);
       setStored('rooms', rooms);
+      
+      void supabase.from('rooms').insert({
+        id: room.id,
+        name: room.name,
+        description: room.description,
+        start_date: room.start_date,
+        end_date: room.end_date || null,
+        weekly_goal: room.weekly_goal,
+        invite_code: room.invite_code,
+        created_by: room.created_by,
+        is_diet: room.is_diet,
+        requires_photo: room.requires_photo
+      });
+
       enqueue('/api/notion/rooms', { ...room, pageId: getGroup()?.pageId });
     },
     update: (roomId: string, updates: Partial<Room>) => {
@@ -199,6 +234,7 @@ export const db = {
       if (index !== -1) {
         rooms[index] = { ...rooms[index], ...updates };
         setStored('rooms', rooms);
+        void supabase.from('rooms').update(updates).eq('id', roomId);
         enqueue('/api/notion/rooms', { id: roomId, updates }, 'PATCH');
       }
     },
@@ -214,6 +250,7 @@ export const db = {
         const full = { room_id: member.room_id, user_id: member.user_id, joined_at };
         members.push(full);
         setStored('room_members', members);
+        void supabase.from('room_members').insert(full);
         enqueue('/api/notion/room-members', full);
       }
     },
@@ -223,7 +260,11 @@ export const db = {
       const allRooms = db.rooms.getAll();
       const allProgress = db.progress.getAll().filter(p => p.user_id === userId);
 
+      const uniqueRoomIds = new Set<string>();
       return myMemberships.map(m => {
+        if (uniqueRoomIds.has(m.room_id)) return null;
+        uniqueRoomIds.add(m.room_id);
+        
         const r = allRooms.find(r => r.id === m.room_id);
         if (r) {
           let joined = m.joined_at || r.start_date;
@@ -240,17 +281,29 @@ export const db = {
   progress: {
     getAll: () => getStored<Progress>('progress'),
     record: (prog: Progress) => {
-      // id를 (룸,유저,날짜) 결정적 키로 정규화 — Notion 왕복 후에도 댓글 참조가 안 깨짐
-      const normalized = { ...prog, id: progressKey(prog.room_id, prog.user_id, prog.record_date) };
+      // id를 (룸,유저,날짜) 결정적 키로 정규화
+      const p = { ...prog, id: progressKey(prog.room_id, prog.user_id, prog.record_date) };
       const records = db.progress.getAll();
-      const existingIdx = records.findIndex(r => r.room_id === prog.room_id && r.user_id === prog.user_id && r.record_date === prog.record_date);
+      const existingIdx = records.findIndex(r => r.id === p.id);
       if (existingIdx >= 0) {
-        records[existingIdx] = normalized;
+        records[existingIdx] = p;
       } else {
-        records.push(normalized);
+        records.push(p);
       }
       setStored('progress', records);
-      enqueue('/api/notion/progress', normalized);
+      
+      void supabase.from('progress').upsert({
+        id: p.id,
+        room_id: p.room_id,
+        user_id: p.user_id,
+        record_date: p.record_date,
+        is_completed: p.is_completed,
+        note: p.note,
+        weight: p.weight || null
+        // 사진은 노션에만 저장하기로 했으므로 supabase에는 넣지 않음
+      });
+
+      enqueue('/api/notion/progress', p);
     },
     getByRoomAndUser: (roomId: string, userId: string) => {
       return db.progress.getAll().filter(p => p.room_id === roomId && p.user_id === userId);
