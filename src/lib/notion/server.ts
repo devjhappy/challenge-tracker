@@ -162,6 +162,8 @@ export async function snapshot(t: Tenant): Promise<{
     weekly_goal: r.properties['주간목표']?.number ?? 5,
     invite_code: text(r.properties['초대코드']),
     created_by: text(r.properties['생성자']),
+    is_diet: r.properties['다이어트']?.checkbox ?? false,
+    requires_photo: r.properties['인증샷필수']?.checkbox ?? false,
   }));
 
   const room_members: RoomMember[] = rmRows.map((r: any) => ({
@@ -177,6 +179,7 @@ export async function snapshot(t: Tenant): Promise<{
     record_date: dateOf(r.properties['날짜']),
     is_completed: r.properties['완료']?.checkbox ?? false,
     note: text(r.properties['메모']),
+    weight: r.properties['체중']?.number,
   }));
 
   // 공유챌린지 룸: ☑️기록 DB(완료한 사람)를 머지 — 위젯·노션 수기 기록이 웹에 보이는 경로
@@ -258,6 +261,8 @@ const roomProps = (r: Partial<Room>): Record<string, unknown> => {
   if (r.weekly_goal !== undefined) p['주간목표'] = { number: r.weekly_goal };
   if (r.invite_code !== undefined) p['초대코드'] = rt(r.invite_code);
   if (r.created_by !== undefined) p['생성자'] = rt(r.created_by);
+  if (r.is_diet !== undefined) p['다이어트'] = { checkbox: r.is_diet };
+  if (r.requires_photo !== undefined) p['인증샷필수'] = { checkbox: r.requires_photo };
   return p;
 };
 

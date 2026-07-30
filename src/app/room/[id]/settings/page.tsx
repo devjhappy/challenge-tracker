@@ -34,6 +34,7 @@ export default function RoomSettingsPage({ params }: { params: Promise<{ id: str
   
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
+  const [requiresPhoto, setRequiresPhoto] = useState(false);
 
   useEffect(() => {
     const currentUser = auth.getCurrentUser();
@@ -52,6 +53,7 @@ export default function RoomSettingsPage({ params }: { params: Promise<{ id: str
     setRoom(foundRoom);
     setName(foundRoom.name);
     setDescription(foundRoom.description);
+    setRequiresPhoto(foundRoom.requires_photo || false);
     
   }, [roomId, router]);
 
@@ -61,7 +63,8 @@ export default function RoomSettingsPage({ params }: { params: Promise<{ id: str
 
     db.rooms.update(roomId, {
       name,
-      description
+      description,
+      requires_photo: requiresPhoto
     });
 
     alert('설정이 저장되었습니다.');
@@ -109,6 +112,18 @@ export default function RoomSettingsPage({ params }: { params: Promise<{ id: str
               onChange={e => setDescription(e.target.value)} 
               disabled={!isOwner}
             />
+          </div>
+
+          <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '1rem', marginBottom: '1.5rem' }}>
+            <input 
+              type="checkbox" 
+              id="requires_photo"
+              checked={requiresPhoto}
+              onChange={e => setRequiresPhoto(e.target.checked)} 
+              disabled={!isOwner}
+              style={{ width: '1.25rem', height: '1.25rem', accentColor: 'var(--primary)' }}
+            />
+            <label htmlFor="requires_photo" style={{ cursor: isOwner ? 'pointer' : 'default', fontWeight: 'bold' }}>📸 인증샷 필수 업로드</label>
           </div>
 
           <div className="form-group">

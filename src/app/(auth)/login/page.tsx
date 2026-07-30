@@ -4,33 +4,54 @@ import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import styles from '../auth.module.css';
-import { db } from '@/utils/db';
-import { auth } from '@/utils/auth';
-import bcrypt from 'bcryptjs';
+import { supabase } from '@/utils/supabase';
 
 export default function LoginPage() {
   const router = useRouter();
-  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setIsLoading(true);
 
-    const user = db.users.findByUsername(username);
-    if (!user) {
-      setError('아이디를 찾을 수 없습니다.');
+    const { error: signInError } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+
+    if (signInError) {
+      setError(signInError.message || '로그인에 실패했습니다.');
+      setIsLoading(false);
       return;
     }
 
-    const isValid = bcrypt.compareSync(password, user.password_hash);
-    if (!isValid) {
-      setError('비밀번호가 일치하지 않습니다.');
-      return;
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      const metadata = user.user_metadata || {};
+      const currentUser = {
+        id: user.id,
+        username: metadata.username || '',
+        password_hash: '',
+        email: user.email || ''
+      };
+      
+      localStorage.setItem('current_user', JSON.stringify(currentUser));
+      
+      if (metadata.notion_token && metadata.notion_dbs) {
+        localStorage.setItem('abs_group', JSON.stringify({
+          name: 'My Workspace',
+          token: metadata.notion_token,
+          dbs: metadata.notion_dbs,
+          pageId: metadata.notion_page
+        }));
+      }
     }
 
-    auth.login(user);
+    // 성공 시 홈으로 리다이렉트
     router.push('/');
   };
 
@@ -41,14 +62,14 @@ export default function LoginPage() {
       
       <form onSubmit={handleLogin} className={styles.form}>
         <div className="form-group">
-          <label className="form-label">아이디</label>
+          <label className="form-label">이메일</label>
           <input
-            type="text"
+            type="email"
             required
             className="input-field"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            placeholder="아이디를 입력하세요"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="이메일을 입력하세요"
           />
         </div>
 
@@ -65,16 +86,13 @@ export default function LoginPage() {
           {error && <p className={styles.error}>{error}</p>}
         </div>
 
-        <button type="submit" className="btn-primary" style={{ width: '100%', marginTop: '1rem' }}>
-          로그인
+        <button type="submit" disabled={isLoading} className="btn-primary" style={{ width: '100%', marginTop: '1rem' }}>
+          {isLoading ? '로그인 중...' : '로그인'}
         </button>
       </form>
 
       <p className={styles.linkText}>
         계정이 없으신가요? <Link href="/signup" className={styles.link}>회원가입</Link>
-      </p>
-      <p className={styles.linkText} style={{ marginTop: '0.5rem' }}>
-        아직 활성화된 챌린지 트래커가 없으신가요? <Link href="/start" className={styles.link}>시작하기</Link>
       </p>
     </div>
   );

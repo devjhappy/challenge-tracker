@@ -15,6 +15,8 @@ export default function CreateRoomPage() {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [weeklyGoal, setWeeklyGoal] = useState(3);
+  const [isDiet, setIsDiet] = useState(false);
+  const [requiresPhoto, setRequiresPhoto] = useState(false);
 
   useEffect(() => {
     const currentUser = auth.getCurrentUser();
@@ -40,7 +42,9 @@ export default function CreateRoomPage() {
       end_date: endDate || undefined,
       weekly_goal: weeklyGoal,
       invite_code: inviteCode,
-      created_by: user.id
+      created_by: user.id,
+      is_diet: isDiet,
+      requires_photo: requiresPhoto
     };
 
     db.rooms.create(newRoom);
@@ -121,6 +125,28 @@ export default function CreateRoomPage() {
               value={weeklyGoal} 
               onChange={e => setWeeklyGoal(parseInt(e.target.value))} 
             />
+          </div>
+
+          <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '1rem' }}>
+            <input 
+              type="checkbox" 
+              id="is_diet"
+              checked={isDiet}
+              onChange={e => setIsDiet(e.target.checked)} 
+              style={{ width: '1.25rem', height: '1.25rem', accentColor: 'var(--primary)' }}
+            />
+            <label htmlFor="is_diet" style={{ cursor: 'pointer', fontWeight: 'bold' }}>다이어트 챌린지 (체중 기록 기능 사용)</label>
+          </div>
+
+          <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '1rem' }}>
+            <input 
+              type="checkbox" 
+              id="requires_photo"
+              checked={requiresPhoto}
+              onChange={e => setRequiresPhoto(e.target.checked)} 
+              style={{ width: '1.25rem', height: '1.25rem', accentColor: 'var(--primary)' }}
+            />
+            <label htmlFor="requires_photo" style={{ cursor: 'pointer', fontWeight: 'bold' }}>📸 인증샷 필수 업로드</label>
           </div>
 
           <button type="submit" className="btn-primary" style={{ width: '100%', marginTop: '1rem' }}>

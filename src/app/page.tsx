@@ -58,6 +58,13 @@ export default function Home() {
   const failedRooms = activeRoomsForSelectedDate.filter(r => !successfulRoomIds.includes(r.id));
   const successfulRooms = activeRoomsForSelectedDate.filter(r => successfulRoomIds.includes(r.id));
 
+  // Today's quick record calculation
+  const todayStr = format(today, 'yyyy-MM-dd');
+  const todayProgress = allProgress.filter(p => p.record_date === todayStr && p.is_completed);
+  const todaySuccessfulRoomIds = todayProgress.map(p => p.room_id);
+  const activeRoomsToday = rooms.filter(r => !r._joined_at || r._joined_at <= todayStr);
+  const unrecordedRoomsToday = activeRoomsToday.filter(r => !todaySuccessfulRoomIds.includes(r.id));
+
   return (
     <div className="container" style={{ paddingTop: '3rem', position: 'relative' }}>
       <header className="responsive-header" style={{ marginBottom: '3rem' }}>
@@ -67,6 +74,23 @@ export default function Home() {
           <button onClick={handleLogout} className="btn-secondary" style={{ padding: '0.5rem 1rem' }}>로그아웃</button>
         </div>
       </header>
+
+      {/* 오늘 미기록 챌린지 퀵 링크 */}
+      {unrecordedRoomsToday.length > 0 && (
+        <section className="glass-panel" style={{ padding: '1.5rem', marginBottom: '2rem', border: '2px solid var(--secondary)' }}>
+          <h2 style={{ fontSize: '1.25rem', marginBottom: '1rem', color: 'var(--text-dark)' }}>⚠️ 오늘 미기록 챌린지 ({unrecordedRoomsToday.length})</h2>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+            {unrecordedRoomsToday.map(room => (
+              <div key={room.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.75rem 1rem', backgroundColor: 'var(--white)', borderRadius: '12px' }}>
+                <span style={{ fontWeight: '500', color: 'var(--text-dark)' }}>{room.name}</span>
+                <Link href={`/room/${room.id}/my-progress`} className="btn-primary" style={{ padding: '0.5rem 1rem', fontSize: '0.875rem' }}>
+                  기록하기
+                </Link>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* 캘린더 뷰 */}
       <section className="glass-panel" style={{ padding: '2rem', marginBottom: '2rem' }}>
@@ -103,10 +127,10 @@ export default function Home() {
           </div>
         )}
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '0.5rem', textAlign: 'center', fontWeight: 'bold', marginBottom: '1rem' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', gap: '0.5rem', textAlign: 'center', fontWeight: 'bold', marginBottom: '1rem' }}>
           <div>일</div><div>월</div><div>화</div><div>수</div><div>목</div><div>금</div><div>토</div>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '0.5rem' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', gap: '0.5rem' }}>
           {Array.from({ length: start.getDay() }).map((_, i) => <div key={`empty-${i}`} />)}
           
           {daysInMonth.map(day => {
@@ -167,48 +191,7 @@ export default function Home() {
         </div>
       </section>
 
-      <section className="glass-panel" style={{ padding: '2rem', marginBottom: '2rem' }}>
-        <h2 style={{ fontSize: '1.5rem', marginBottom: '1.5rem' }}>내 챌린지 룸 (바로 기록하기)</h2>
-        
-        {rooms.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '3rem 0', color: 'var(--text-light)' }}>
-            <p style={{ marginBottom: '1.5rem' }}>참여 중인 챌린지가 없습니다.</p>
-          </div>
-        ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '1.5rem', marginBottom: '2rem' }}>
-            {rooms.map(room => (
-              <div key={room.id} className="glass-panel" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column' }}>
-                <div style={{ flex: 1 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                    <Link href={`/room/${room.id}`} style={{ flex: 1 }}>
-                      <h3 style={{ fontSize: '1.25rem', marginBottom: '0.5rem', color: 'var(--primary)' }}>{room.name}</h3>
-                    </Link>
-                  </div>
-                  <Link href={`/room/${room.id}`}>
-                    <p style={{ color: 'var(--text-light)', marginBottom: '1rem' }}>{room.description}</p>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem' }}>
-                      <span>{room.start_date} ~ {room.end_date || '진행중'}</span>
-                      <span>주 {room.weekly_goal}회</span>
-                    </div>
-                  </Link>
-                </div>
-                <Link href={`/room/${room.id}/my-progress`} className="btn-primary" style={{ marginTop: '1rem', textAlign: 'center', display: 'block' }}>
-                  오늘 기록 남기기
-                </Link>
-              </div>
-            ))}
-          </div>
-        )}
 
-        <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
-          <Link href="/room/create" className="btn-primary">
-            + 새 챌린지 룸 만들기
-          </Link>
-          <Link href="/room/join" className="btn-secondary">
-            초대 코드로 참여하기
-          </Link>
-        </div>
-      </section>
 
       {/* 모달 창 */}
       {selectedDateStr && (
