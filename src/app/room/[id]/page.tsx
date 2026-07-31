@@ -118,6 +118,9 @@ export default function RoomDashboardPage({ params }: { params: Promise<{ id: st
   }
   const weightChartData = Object.values(weightDataByDate).sort((a, b) => a.date.localeCompare(b.date));
 
+  const todayStr = format(today, 'yyyy-MM-dd');
+  const hasRecordedToday = allProgress.some(p => p.user_id === user.id && p.record_date === todayStr && p.is_completed);
+
   const membersToChart = selectedUserIds.length > 0
     ? members.filter(m => selectedUserIds.includes(m.user_id))
     : members;
@@ -127,9 +130,6 @@ export default function RoomDashboardPage({ params }: { params: Promise<{ id: st
   return (
     <div className="container" style={{ paddingTop: '3rem' }}>
       <header style={{ marginBottom: '2rem' }}>
-        <Link href="/" style={{ color: 'var(--text-light)', marginBottom: '1rem', display: 'inline-block' }}>
-          &larr; 대시보드로 돌아가기
-        </Link>
         <div className="responsive-header">
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '0.5rem' }}>
@@ -150,6 +150,11 @@ export default function RoomDashboardPage({ params }: { params: Promise<{ id: st
 
       <div className="dashboard-grid">
         <main>
+          {!hasRecordedToday && (
+            <Link href={`/room/${room.id}/my-progress`} className="btn-primary" style={{ display: 'block', width: '100%', textAlign: 'center', padding: '1rem', marginBottom: '2rem', fontSize: '1.125rem', fontWeight: 'bold' }}>
+              📝 오늘 기록 남기기
+            </Link>
+          )}
           {/* 그룹 캘린더 뷰 */}
           <section className="glass-panel" style={{ padding: '2rem', marginBottom: '2rem' }}>
             <h2 style={{ fontSize: '1.5rem', marginBottom: '1rem', textAlign: 'center' }}>공동 캘린더 현황</h2>
@@ -260,6 +265,39 @@ export default function RoomDashboardPage({ params }: { params: Promise<{ id: st
             </div>
           </section>
 
+          {/* 명예의 전당 (랭킹) - TOP 3 */}
+          <section className="glass-panel" style={{ padding: '2rem', marginBottom: '2rem' }}>
+            <h2 style={{ fontSize: '1.5rem', marginBottom: '1.5rem', color: 'var(--text-dark)' }}>🏆 명예의 전당 (TOP 3)</h2>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              {members.slice(0, 3).map((member, index) => (
+                <div
+                  key={member.user_id}
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    padding: '1rem',
+                    backgroundColor: 'var(--white)',
+                    borderRadius: '8px',
+                    border: index === 0 ? '2px solid #fef08a' : '1px solid #e5e7eb',
+                    position: 'relative',
+                    overflow: 'hidden'
+                  }}
+                >
+                  {index === 0 && <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '4px', backgroundColor: '#fef08a' }} />}
+                  <span style={{ fontWeight: index < 3 ? 'bold' : 'normal' }}>
+                    {index === 0 && '🥇 '}
+                    {index === 1 && '🥈 '}
+                    {index === 2 && '🥉 '}
+                    {member.username}
+                  </span>
+                  <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                    <span style={{ color: 'var(--primary)', fontWeight: 'bold' }}>{member.completions}회 성공</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+
           {/* 주차별 현황판 */}
           <section className="glass-panel" style={{ padding: '2rem', marginBottom: '2rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
@@ -335,153 +373,113 @@ export default function RoomDashboardPage({ params }: { params: Promise<{ id: st
             </div>
           </section>
 
-          {/* 인증 피드 및 댓글 */}
-          <section className="glass-panel" style={{ padding: '2rem' }}>
-            <h2 style={{ fontSize: '1.5rem', marginBottom: '1.5rem' }}>💬 최근 인증 피드</h2>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-              {allProgress.filter(p => p.is_completed && p.note).sort((a, b) => b.record_date.localeCompare(a.record_date)).map(progress => {
-                const author = members.find(m => m.user_id === progress.user_id)?.username || '알 수 없음';
-                const comments = allComments.filter(c => c.progress_id === progress.id);
-
-                return (
-                  <div key={progress.id} style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '1.5rem', backgroundColor: 'var(--white)' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem' }}>
-                      <span style={{ fontWeight: 'bold', fontSize: '1.1rem' }}>{author}</span>
-                      <span style={{ color: 'var(--text-light)', fontSize: '0.9rem' }}>{progress.record_date}</span>
+            {/* 멤버별 체중 변화 */}
+            {room.is_diet && (
+              <section className="glass-panel" style={{ padding: '2rem', marginBottom: '2rem' }}>
+                <h2 style={{ fontSize: '1.5rem', marginBottom: '1rem', color: 'var(--text-dark)' }}>⚖️ 멤버별 체중 변화</h2>
+                {weightChartData.length > 0 ? (
+                  <>
+                    <div style={{ width: '100%', height: '300px' }}>
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart data={weightChartData}>
+                          <XAxis dataKey="date" fontSize={12} tickMargin={10} />
+                          <YAxis domain={['dataMin - 2', 'dataMax + 2']} fontSize={12} width={30} />
+                          <Tooltip
+                            contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}
+                            formatter={(value: any, name: any) => [value > 0 ? `+${value}kg` : `${value}kg`, name]}
+                          />
+                          {membersToChart.map((m, idx) => (
+                            <Line
+                              key={m.user_id}
+                              type="monotone"
+                              dataKey={m.user_id}
+                              name={m.username || '멤버'}
+                              stroke={chartColors[idx % chartColors.length]}
+                              strokeWidth={3}
+                              dot={{ r: 4 }}
+                              activeDot={{ r: 6 }}
+                              connectNulls
+                            />
+                          ))}
+                        </LineChart>
+                      </ResponsiveContainer>
                     </div>
-                    <p style={{ backgroundColor: '#f9fafb', padding: '1rem', borderRadius: '8px', marginBottom: '1rem' }}>
-                      {progress.note}
+                    <p style={{ fontSize: '0.8rem', color: 'var(--text-light)', textAlign: 'center', marginTop: '1rem' }}>
+                      캘린더 위쪽의 '이름' 버튼을 클릭하여 특정 멤버만 확인할 수 있습니다.
                     </p>
+                  </>
+                ) : (
+                  <p style={{ textAlign: 'center', color: 'var(--text-light)', padding: '1rem 0' }}>
+                    아직 체중 기록이 없습니다.
+                  </p>
+                )}
+              </section>
+            )}
+          </main>
 
-                    {/* 댓글 영역 */}
-                    <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: '1rem' }}>
-                      {comments.map(comment => {
-                        const commenter = members.find(m => m.user_id === comment.user_id)?.username || db.users.findById(comment.user_id)?.username || '알 수 없음';
-                        return (
-                          <div key={comment.id} style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.5rem', fontSize: '0.9rem' }}>
-                            <strong style={{ color: 'var(--text-dark)' }}>{commenter}</strong>
-                            <span>{comment.content}</span>
-                          </div>
-                        );
-                      })}
+          <aside>
+            {/* 인증 피드 및 댓글 */}
+            <section className="glass-panel" style={{ padding: '2rem' }}>
+              <h2 style={{ fontSize: '1.5rem', marginBottom: '1.5rem' }}>💬 최근 인증 피드</h2>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                {allProgress.filter(p => p.is_completed && p.note).sort((a, b) => b.record_date.localeCompare(a.record_date)).map(progress => {
+                  const author = members.find(m => m.user_id === progress.user_id)?.username || '알 수 없음';
+                  const comments = allComments.filter(c => c.progress_id === progress.id);
 
-                      <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem' }}>
-                        <input
-                          type="text"
-                          placeholder="댓글 달기..."
-                          className="input-field"
-                          style={{ padding: '0.5rem', fontSize: '0.9rem' }}
-                          value={newComment[progress.id] || ''}
-                          onChange={(e) => setNewComment({ ...newComment, [progress.id]: e.target.value })}
-                          onKeyDown={(e) => e.key === 'Enter' && handleAddComment(progress.id)}
-                        />
-                        <button
-                          onClick={() => handleAddComment(progress.id)}
-                          className="btn-secondary"
-                          style={{ padding: '0.5rem', width: '40px', display: 'flex', justifyContent: 'center', alignItems: 'center', borderRadius: '8px' }}
-                          title="등록"
-                        >
-                          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
-                            <path d="M15.854.146a.5.5 0 0 1 .11.54l-5.819 14.547a.75.75 0 0 1-1.329.124l-3.178-4.995L.643 7.184a.75.75 0 0 1 .124-1.33L15.314.037a.5.5 0 0 1 .54.11ZM6.636 10.07l2.761 4.338L14.13 2.576 6.636 10.07Zm6.787-8.201L1.591 6.602l4.339 2.76 7.494-7.493Z" />
-                          </svg>
-                        </button>
+                  return (
+                    <div key={progress.id} style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '1.5rem', backgroundColor: 'var(--white)' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem' }}>
+                        <span style={{ fontWeight: 'bold', fontSize: '1.1rem' }}>{author}</span>
+                        <span style={{ color: 'var(--text-light)', fontSize: '0.9rem' }}>{progress.record_date}</span>
+                      </div>
+                      <p style={{ backgroundColor: '#f9fafb', padding: '1rem', borderRadius: '8px', marginBottom: '1rem', wordBreak: 'break-word' }}>
+                        {progress.note}
+                      </p>
+
+                      {/* 댓글 영역 */}
+                      <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: '1rem' }}>
+                        {comments.map(comment => {
+                          const commenter = members.find(m => m.user_id === comment.user_id)?.username || db.users.findById(comment.user_id)?.username || '알 수 없음';
+                          return (
+                            <div key={comment.id} style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.5rem', fontSize: '0.9rem' }}>
+                              <strong style={{ color: 'var(--text-dark)', flexShrink: 0 }}>{commenter}</strong>
+                              <span style={{ wordBreak: 'break-word' }}>{comment.content}</span>
+                            </div>
+                          );
+                        })}
+
+                        <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem' }}>
+                          <input
+                            type="text"
+                            placeholder="댓글 달기..."
+                            className="input-field"
+                            style={{ padding: '0.5rem', fontSize: '0.9rem', flex: 1, minWidth: 0 }}
+                            value={newComment[progress.id] || ''}
+                            onChange={(e) => setNewComment({ ...newComment, [progress.id]: e.target.value })}
+                            onKeyDown={(e) => e.key === 'Enter' && handleAddComment(progress.id)}
+                          />
+                          <button
+                            onClick={() => handleAddComment(progress.id)}
+                            className="btn-secondary"
+                            style={{ padding: '0.5rem', width: '40px', flexShrink: 0, display: 'flex', justifyContent: 'center', alignItems: 'center', borderRadius: '8px' }}
+                            title="등록"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                              <path d="M15.854.146a.5.5 0 0 1 .11.54l-5.819 14.547a.75.75 0 0 1-1.329.124l-3.178-4.995L.643 7.184a.75.75 0 0 1 .124-1.33L15.314.037a.5.5 0 0 1 .54.11ZM6.636 10.07l2.761 4.338L14.13 2.576 6.636 10.07Zm6.787-8.201L1.591 6.602l4.339 2.76 7.494-7.493Z" />
+                            </svg>
+                          </button>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                );
-              })}
+                  );
+                })}
 
-              {allProgress.filter(p => p.is_completed && p.note).length === 0 && (
-                <p style={{ textAlign: 'center', color: 'var(--text-light)', padding: '2rem 0' }}>아직 작성된 인증 피드가 없습니다.</p>
-              )}
-            </div>
-          </section>
-        </main>
-
-        <aside>
-          {room.is_diet && (
-            <section className="glass-panel" style={{ padding: '2rem', marginBottom: '2rem' }}>
-              <h2 style={{ fontSize: '1.5rem', marginBottom: '1rem', color: 'var(--text-dark)' }}>⚖️ 멤버별 체중 변화</h2>
-              {weightChartData.length > 0 ? (
-                <>
-                  <div style={{ width: '100%', height: '200px' }}>
-                    <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={weightChartData}>
-                        <XAxis dataKey="date" fontSize={12} tickMargin={10} />
-                        <YAxis domain={['dataMin - 2', 'dataMax + 2']} fontSize={12} width={30} />
-                        <Tooltip
-                          contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}
-                          formatter={(value: any) => [value > 0 ? `+${value}kg` : `${value}kg`, '변화량']}
-                        />
-                        {membersToChart.map((m, idx) => (
-                          <Line
-                            key={m.user_id}
-                            type="monotone"
-                            dataKey={m.user_id}
-                            name={m.username || '멤버'}
-                            stroke={chartColors[idx % chartColors.length]}
-                            strokeWidth={3}
-                            dot={{ r: 4 }}
-                            activeDot={{ r: 6 }}
-                            connectNulls
-                          />
-                        ))}
-                      </LineChart>
-                    </ResponsiveContainer>
-                  </div>
-                  <p style={{ fontSize: '0.8rem', color: 'var(--text-light)', textAlign: 'center', marginTop: '1rem' }}>
-                    캘린더 위쪽의 '이름' 버튼을 클릭하여 특정 멤버만 확인할 수 있습니다.
-                  </p>
-                </>
-              ) : (
-                <p style={{ textAlign: 'center', color: 'var(--text-light)', padding: '1rem 0' }}>
-                  아직 체중 기록이 없습니다.
-                </p>
-              )}
+                {allProgress.filter(p => p.is_completed && p.note).length === 0 && (
+                  <p style={{ textAlign: 'center', color: 'var(--text-light)', padding: '2rem 0' }}>아직 작성된 인증 피드가 없습니다.</p>
+                )}
+              </div>
             </section>
-          )}
-
-          <section className="glass-panel" style={{ padding: '2rem', marginBottom: '2rem' }}>
-            <h2 style={{ fontSize: '1.5rem', marginBottom: '1.5rem', color: 'var(--text-dark)' }}>🏆 명예의 전당 (랭킹)</h2>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              {members.map((member, index) => (
-                <div
-                  key={member.user_id}
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    padding: '1rem',
-                    backgroundColor: 'var(--white)',
-                    borderRadius: '8px',
-                    border: index === 0 ? '2px solid #fef08a' : '1px solid #e5e7eb',
-                    position: 'relative',
-                    overflow: 'hidden'
-                  }}
-                >
-                  {index === 0 && <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '4px', backgroundColor: '#fef08a' }} />}
-                  <span style={{ fontWeight: index < 3 ? 'bold' : 'normal' }}>
-                    {index === 0 && '🥇 '}
-                    {index === 1 && '🥈 '}
-                    {index === 2 && '🥉 '}
-                    {index > 2 && `${index + 1}. `}
-                    {member.username}
-                  </span>
-                  <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-                    <span style={{ color: 'var(--primary)', fontWeight: 'bold' }}>{member.completions}회 성공</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </section>
-
-          <section className="glass-panel" style={{ padding: '2rem', textAlign: 'center' }}>
-            <h3 style={{ fontSize: '1.25rem', marginBottom: '1rem' }}>오늘의 내 기록 남기기</h3>
-            <p style={{ marginBottom: '1.5rem', color: 'var(--text-light)' }}>상세한 활동을 꼭 기록해주세요.</p>
-            <Link href={`/room/${room.id}/my-progress`} className="btn-primary" style={{ display: 'block', width: '100%' }}>
-              기록실 가기 &rarr;
-            </Link>
-          </section>
-        </aside>
+          </aside>
       </div>
     </div>
   );

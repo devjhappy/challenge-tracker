@@ -3,35 +3,17 @@
 import React, { useState, useEffect, use } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { db, getGroup, Room, User } from '@/utils/db';
+import { db, Room, User } from '@/utils/db';
 import { auth } from '@/utils/auth';
-
-// 초대 링크: 그룹 키(토큰·DB)+룸 id를 URL 해시에 담음 — 받는 사람은 링크만 열고 가입하면 그룹 연결+룸 참여 완료.
-// 해시(#) 부분은 서버로 전송되지 않고, 링크를 아는 사람 = 그룹 키를 아는 사람(기존 키 공유와 동일한 신뢰 수준)
-function InviteLinkButton({ roomId }: { roomId: string }) {
-  const g = getGroup();
-  if (!g?.token || !g?.dbs) return null; // 기본 그룹(무쇠소녀단)은 키가 서버에만 있어 링크 발급 불가
-  const copy = () => {
-    const payload = { v: 1, n: g.name, t: g.token, d: g.dbs, p: g.pageId, r: roomId };
-    const hash = btoa(encodeURIComponent(JSON.stringify(payload)));
-    navigator.clipboard.writeText(`${location.origin}/join#${hash}`);
-    alert('초대 링크가 복사되었습니다! 링크를 열면 가입만 하고 바로 이 챌린지에 참여돼요.');
-  };
-  return (
-    <button type="button" onClick={copy} className="btn-secondary" style={{ marginTop: '0.5rem', width: '100%' }}>
-      🔗 초대 링크 복사 (그룹 연결 + 참여까지 한 번에)
-    </button>
-  );
-}
 
 export default function RoomSettingsPage({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter();
   const unwrappedParams = use(params);
   const roomId = unwrappedParams.id;
-  
+
   const [user, setUser] = useState<User | null>(null);
   const [room, setRoom] = useState<Room | null>(null);
-  
+
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [requiresPhoto, setRequiresPhoto] = useState(false);
@@ -49,12 +31,12 @@ export default function RoomSettingsPage({ params }: { params: Promise<{ id: str
       router.push('/');
       return;
     }
-    
+
     setRoom(foundRoom);
     setName(foundRoom.name);
     setDescription(foundRoom.description);
     setRequiresPhoto(foundRoom.requires_photo || false);
-    
+
   }, [roomId, router]);
 
   const handleUpdate = (e: React.FormEvent) => {
@@ -93,33 +75,33 @@ export default function RoomSettingsPage({ params }: { params: Promise<{ id: str
         <form onSubmit={handleUpdate}>
           <div className="form-group">
             <label className="form-label">{isOwner ? '챌린지 이름 수정' : '챌린지 이름'}</label>
-            <input 
-              type="text" 
-              className="input-field" 
-              required 
-              value={name} 
-              onChange={e => setName(e.target.value)} 
+            <input
+              type="text"
+              className="input-field"
+              required
+              value={name}
+              onChange={e => setName(e.target.value)}
               disabled={!isOwner}
             />
           </div>
 
           <div className="form-group">
             <label className="form-label">{isOwner ? '상세 설명 수정' : '상세 설명'}</label>
-            <textarea 
-              className="input-field" 
-              rows={4} 
-              value={description} 
-              onChange={e => setDescription(e.target.value)} 
+            <textarea
+              className="input-field"
+              rows={4}
+              value={description}
+              onChange={e => setDescription(e.target.value)}
               disabled={!isOwner}
             />
           </div>
 
           <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '1rem', marginBottom: '1.5rem' }}>
-            <input 
-              type="checkbox" 
+            <input
+              type="checkbox"
               id="requires_photo"
               checked={requiresPhoto}
-              onChange={e => setRequiresPhoto(e.target.checked)} 
+              onChange={e => setRequiresPhoto(e.target.checked)}
               disabled={!isOwner}
               style={{ width: '1.25rem', height: '1.25rem', accentColor: 'var(--primary)' }}
             />
@@ -129,14 +111,14 @@ export default function RoomSettingsPage({ params }: { params: Promise<{ id: str
           <div className="form-group">
             <label className="form-label">초대 코드</label>
             <div style={{ display: 'flex', gap: '0.5rem' }}>
-              <input 
-                type="text" 
-                className="input-field" 
-                readOnly 
-                value={room.invite_code} 
+              <input
+                type="text"
+                className="input-field"
+                readOnly
+                value={room.invite_code}
                 style={{ backgroundColor: 'var(--bg-color)', fontWeight: 'bold', letterSpacing: '1px' }}
               />
-              <button 
+              <button
                 type="button"
                 onClick={() => {
                   navigator.clipboard.writeText(room.invite_code);
@@ -148,7 +130,6 @@ export default function RoomSettingsPage({ params }: { params: Promise<{ id: str
                 복사
               </button>
             </div>
-            <InviteLinkButton roomId={room.id} />
           </div>
 
           {isOwner && (
