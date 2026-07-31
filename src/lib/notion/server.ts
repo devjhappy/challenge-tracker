@@ -323,7 +323,7 @@ export async function createRoom(t: Tenant, r: Room & { shared?: boolean; pageId
     await api(t, 'PATCH', `/blocks/${roomPage.id}/children`, {
       children: [{ object: 'block', type: 'divider', divider: {} }],
     }).catch(() => undefined);
-    await api(t, 'PATCH', `/databases/${t.dbs.rooms}`, { properties: { 기록DB: { rich_text: {} }, 주차DB: { rich_text: {} } } }).catch(() => undefined);
+    await api(t, 'PATCH', `/databases/${t.dbs.rooms}`, { properties: { 기록DB: { rich_text: {} }, 주차DB: { rich_text: {} }, 다이어트: { checkbox: {} }, 인증샷필수: { checkbox: {} } } }).catch(() => undefined);
     const created = await api(t, 'POST', '/databases', {
       parent: { type: 'page_id', page_id: roomPage.id },
       icon: { type: 'emoji', emoji: '☑️' },
@@ -401,13 +401,18 @@ export async function joinRoom(t: Tenant, m: RoomMember): Promise<void> {
 
 export async function upsertProgress(t: Tenant, p: Progress): Promise<void> {
   const key = progressKey(p.room_id, p.user_id, p.record_date);
-  const props = {
+  const props: any = {
     룸: rt(p.room_id),
     유저: rt(p.user_id),
     날짜: { date: { start: p.record_date } },
     완료: { checkbox: p.is_completed },
     메모: rt(p.note ?? ''),
   };
+  if (p.weight !== undefined) {
+    props['체중'] = { number: p.weight };
+    await api(t, 'PATCH', `/databases/${t.dbs.webRecords}`, { properties: { 체중: { number: {} } } }).catch(() => undefined);
+  }
+
   const rows = await queryAll(t, t.dbs.webRecords, { filter: { property: '키', title: { equals: key } } });
   if (rows.length > 0) await api(t, 'PATCH', `/pages/${rows[0].id}`, { properties: props });
   else await api(t, 'POST', '/pages', { parent: { database_id: t.dbs.webRecords }, properties: { 키: title(key), ...props } });
@@ -664,6 +669,7 @@ const DB_SPECS: Array<{ key: keyof Dbs; icon: string; title: string; match: stri
     properties: {
       이름: { title: {} }, 웹ID: { rich_text: {} }, 설명: { rich_text: {} }, 시작일: { date: {} }, 종료일: { date: {} },
       주간목표: { number: {} }, 초대코드: { rich_text: {} }, 생성자: { rich_text: {} }, 공유챌린지: { checkbox: {} },
+      다이어트: { checkbox: {} }, 인증샷필수: { checkbox: {} }, 기록DB: { rich_text: {} }, 주차DB: { rich_text: {} }
     },
   },
   {
@@ -672,7 +678,7 @@ const DB_SPECS: Array<{ key: keyof Dbs; icon: string; title: string; match: stri
   },
   {
     key: 'webRecords', icon: '📊', title: '웹기록', match: ['웹기록'],
-    properties: { 키: { title: {} }, 룸: { rich_text: {} }, 유저: { rich_text: {} }, 날짜: { date: {} }, 완료: { checkbox: {} }, 메모: { rich_text: {} } },
+    properties: { 키: { title: {} }, 룸: { rich_text: {} }, 유저: { rich_text: {} }, 날짜: { date: {} }, 완료: { checkbox: {} }, 메모: { rich_text: {} }, 체중: { number: {} } },
   },
   {
     key: 'comments', icon: '💬', title: '댓글', match: ['댓글'],

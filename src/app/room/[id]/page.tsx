@@ -92,25 +92,37 @@ export default function RoomDashboardPage({ params }: { params: Promise<{ id: st
     curr = addWeeks(curr, 1);
   }
 
-  // Weight logic
-  const myWeightRecords = room.is_diet
-    ? allProgress
-      .filter(p => p.user_id === user.id && p.weight !== undefined)
-      .sort((a, b) => a.record_date.localeCompare(b.record_date))
-      .map(p => ({ date: p.record_date.substring(5).replace('-', '/'), weight: p.weight }))
-    : [];
+  // Weight logic (Multi-user, Relative Change)
+  const weightDataByDate: Record<string, any> = {};
+  if (room.is_diet) {
+    const relevantProgress = allProgress
+      .filter(p => p.weight !== undefined)
+      .sort((a, b) => a.record_date.localeCompare(b.record_date));
 
-  let weightDiffText = '';
-  if (myWeightRecords.length > 1) {
-    const firstW = myWeightRecords[0].weight!;
-    const lastW = myWeightRecords[myWeightRecords.length - 1].weight!;
-    const diff = lastW - firstW;
-    if (diff > 0) weightDiffText = `${diff.toFixed(1)}kg 증가했습니다`;
-    else if (diff < 0) weightDiffText = `${Math.abs(diff).toFixed(1)}kg 감량했습니다! 🎉`;
-    else weightDiffText = '체중이 유지되고 있습니다.';
-  } else if (myWeightRecords.length === 1) {
-    weightDiffText = '오늘부터 체중 기록 시작!';
+    const initialWeights: Record<string, number> = {};
+    relevantProgress.forEach(p => {
+      if (initialWeights[p.user_id] === undefined) {
+        initialWeights[p.user_id] = p.weight!;
+      }
+    });
+
+    relevantProgress.forEach(p => {
+      const dateStr = p.record_date.substring(5).replace('-', '/');
+      if (!weightDataByDate[dateStr]) {
+        weightDataByDate[dateStr] = { date: dateStr };
+      }
+      const initial = initialWeights[p.user_id];
+      const diff = p.weight! - initial;
+      weightDataByDate[dateStr][p.user_id] = Math.round(diff * 10) / 10;
+    });
   }
+  const weightChartData = Object.values(weightDataByDate).sort((a, b) => a.date.localeCompare(b.date));
+
+  const membersToChart = selectedUserIds.length > 0
+    ? members.filter(m => selectedUserIds.includes(m.user_id))
+    : members;
+
+  const chartColors = ['#8884d8', '#82ca9d', '#ffc658', '#ff8042', '#0088fe', '#00c49f', '#ffbb28', '#d0ed57', '#a4de6c'];
 
   return (
     <div className="container" style={{ paddingTop: '3rem' }}>
@@ -389,24 +401,36 @@ export default function RoomDashboardPage({ params }: { params: Promise<{ id: st
         <aside>
           {room.is_diet && (
             <section className="glass-panel" style={{ padding: '2rem', marginBottom: '2rem' }}>
-              <h2 style={{ fontSize: '1.5rem', marginBottom: '1rem', color: 'var(--text-dark)' }}>⚖️ 나의 체중 변화</h2>
-              {myWeightRecords.length > 0 ? (
+              <h2 style={{ fontSize: '1.5rem', marginBottom: '1rem', color: 'var(--text-dark)' }}>⚖️ 멤버별 체중 변화</h2>
+              {weightChartData.length > 0 ? (
                 <>
-                  <p style={{ fontWeight: 'bold', fontSize: '1.1rem', color: 'var(--primary)', marginBottom: '1.5rem', textAlign: 'center' }}>
-                    {weightDiffText}
-                  </p>
                   <div style={{ width: '100%', height: '200px' }}>
                     <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={myWeightRecords}>
+                      <LineChart data={weightChartData}>
                         <XAxis dataKey="date" fontSize={12} tickMargin={10} />
                         <YAxis domain={['dataMin - 2', 'dataMax + 2']} fontSize={12} width={30} />
-                        <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }} />
-                        <Line type="monotone" dataKey="weight" stroke="var(--primary)" strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 6 }} />
+                        <Tooltip
+                          contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}
+                          formatter={(value: any) => [value > 0 ? `+${value}kg` : `${value}kg`, '변화량']}
+                        />
+                        {membersToChart.map((m, idx) => (
+                          <Line
+                            key={m.user_id}
+                            type="monotone"
+                            dataKey={m.user_id}
+                            name={m.username || '멤버'}
+                            stroke={chartColors[idx % chartColors.length]}
+                            strokeWidth={3}
+                            dot={{ r: 4 }}
+                            activeDot={{ r: 6 }}
+                            connectNulls
+                          />
+                        ))}
                       </LineChart>
                     </ResponsiveContainer>
                   </div>
                   <p style={{ fontSize: '0.8rem', color: 'var(--text-light)', textAlign: 'center', marginTop: '1rem' }}>
-                    * 체중 정보는 본인에게만 보입니다.
+                    캘린더 위쪽의 '이름' 버튼을 클릭하여 특정 멤버만 확인할 수 있습니다.
                   </p>
                 </>
               ) : (

@@ -158,12 +158,14 @@ export async function notionSync(): Promise<boolean> {
       { data: profiles },
       { data: rooms },
       { data: room_members },
-      { data: progress }
+      { data: progress },
+      snapshotRes
     ] = await Promise.all([
       supabase.from('profiles').select('*'),
       supabase.from('rooms').select('*'),
       supabase.from('room_members').select('*'),
-      supabase.from('progress').select('*')
+      supabase.from('progress').select('*'),
+      absFetch('/api/notion/snapshot')
     ]);
 
     const mappedUsers = (profiles || []).map(p => ({
@@ -174,17 +176,46 @@ export async function notionSync(): Promise<boolean> {
     }));
 
     setStored('users', mappedUsers);
-    setStored('rooms', rooms || []);
-    setStored('room_members', room_members || []);
-    setStored('progress', progress || []);
     
-    // Comments removed from supabase to keep it simple, but we leave the cache array
-    setStored('comments', getStored('comments') || []);
+    if (snapshotRes.ok) {
+      const snap = await snapshotRes.json();
+      
+      const merge = (localKey: string, supaData: any[], snapData: any[], keyFn: (item: any) => string) => {
+        const local = getStored<any>(localKey);
+        const supaMap = new Map(supaData.map(s => [keyFn(s), s]));
+        const snapMap = new Map(snapData.map(s => [keyFn(s), s]));
+        
+        // Start with Supabase data (Main Truth)
+        const merged = [...supaData];
+        
+        // Merge Notion snapshot (Backup)
+        for (const s of snapData) {
+          if (!supaMap.has(keyFn(s))) merged.push(s);
+        }
+        
+        // Merge Local cache (Eventual Consistency)
+        const mergedMap = new Map(merged.map(s => [keyFn(s), s]));
+        for (const l of local) {
+          if (!mergedMap.has(keyFn(l))) merged.push(l);
+        }
+        return merged;
+      };
+
+      setStored('rooms', merge('rooms', rooms || [], snap.rooms || [], r => r.id));
+      setStored('room_members', merge('room_members', room_members || [], snap.room_members || [], m => `${m.room_id}_${m.user_id}`));
+      setStored('progress', merge('progress', progress || [], snap.progress || [], p => p.id));
+      setStored('comments', merge('comments', [], snap.comments || [], c => c.id));
+    } else {
+      setStored('rooms', rooms || []);
+      setStored('room_members', room_members || []);
+      setStored('progress', progress || []);
+      console.warn('[abs] snapshot failed, keeping existing cache');
+    }
     
     window.dispatchEvent(new Event('abs:synced'));
     return true;
   } catch (e) {
-    console.error('[abs] supabase sync failed:', e);
+    console.error('[abs] sync failed:', e);
     return false;
   }
 }
@@ -208,12 +239,12 @@ export const db = {
   },
   rooms: {
     getAll: () => getStored<Room>('rooms'),
-    create: (room: Room) => {
+    create: async (room: Room) => {
       const rooms = db.rooms.getAll();
       rooms.push(room);
       setStored('rooms', rooms);
       
-      void supabase.from('rooms').insert({
+      const res = await supabase.from('rooms').insert({
         id: room.id,
         name: room.name,
         description: room.description,
@@ -225,16 +256,18 @@ export const db = {
         is_diet: room.is_diet,
         requires_photo: room.requires_photo
       });
+      if (res?.error) console.error('[Supabase Error - insert room]:', res.error);
 
       enqueue('/api/notion/rooms', { ...room, pageId: getGroup()?.pageId });
     },
-    update: (roomId: string, updates: Partial<Room>) => {
+    update: async (roomId: string, updates: Partial<Room>) => {
       const rooms = db.rooms.getAll();
       const index = rooms.findIndex(r => r.id === roomId);
       if (index !== -1) {
         rooms[index] = { ...rooms[index], ...updates };
         setStored('rooms', rooms);
-        void supabase.from('rooms').update(updates).eq('id', roomId);
+        const res = await supabase.from('rooms').update(updates).eq('id', roomId);
+        if (res?.error) console.error('[Supabase Error - update room]:', res.error);
         enqueue('/api/notion/rooms', { id: roomId, updates }, 'PATCH');
       }
     },
@@ -243,14 +276,15 @@ export const db = {
   },
   roomMembers: {
     getAll: () => getStored<RoomMember>('room_members'),
-    join: (member: Omit<RoomMember, 'joined_at'> & { joined_at?: string }) => {
+    join: async (member: Omit<RoomMember, 'joined_at'> & { joined_at?: string }) => {
       const members = db.roomMembers.getAll();
       if (!members.find(m => m.room_id === member.room_id && m.user_id === member.user_id)) {
         const joined_at = member.joined_at || new Date().toISOString().split('T')[0];
         const full = { room_id: member.room_id, user_id: member.user_id, joined_at };
         members.push(full);
         setStored('room_members', members);
-        void supabase.from('room_members').insert(full);
+        const res = await supabase.from('room_members').insert(full);
+        if (res?.error) console.error('[Supabase Error - insert room_member]:', res.error);
         enqueue('/api/notion/room-members', full);
       }
     },
@@ -280,7 +314,7 @@ export const db = {
   },
   progress: {
     getAll: () => getStored<Progress>('progress'),
-    record: (prog: Progress) => {
+    record: async (prog: Progress) => {
       // id를 (룸,유저,날짜) 결정적 키로 정규화
       const p = { ...prog, id: progressKey(prog.room_id, prog.user_id, prog.record_date) };
       const records = db.progress.getAll();
@@ -292,7 +326,7 @@ export const db = {
       }
       setStored('progress', records);
       
-      void supabase.from('progress').upsert({
+      const res = await supabase.from('progress').upsert({
         id: p.id,
         room_id: p.room_id,
         user_id: p.user_id,
@@ -300,8 +334,8 @@ export const db = {
         is_completed: p.is_completed,
         note: p.note,
         weight: p.weight || null
-        // 사진은 노션에만 저장하기로 했으므로 supabase에는 넣지 않음
       });
+      if (res?.error) console.error('[Supabase Error - upsert progress]:', res.error);
 
       enqueue('/api/notion/progress', p);
     },

@@ -27,7 +27,7 @@ export default function CreateRoomPage() {
     setUser(currentUser);
   }, [router]);
 
-  const handleCreate = (e: React.FormEvent) => {
+  const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
 
@@ -47,9 +47,9 @@ export default function CreateRoomPage() {
       requires_photo: requiresPhoto
     };
 
-    db.rooms.create(newRoom);
+    await db.rooms.create(newRoom);
     // Auto join the creator
-    db.roomMembers.join({ room_id: newRoom.id, user_id: user.id });
+    await db.roomMembers.join({ room_id: newRoom.id, user_id: user.id });
 
     router.push(`/room/${newRoom.id}`);
   };
