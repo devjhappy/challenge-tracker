@@ -78,6 +78,21 @@ export default function SignupPage() {
           dbs: provData.dbs,
           pageId: notionPage
         }));
+
+        // 노션 멤버 DB에 유저 정보 등록 (이후 업로드/기록 연동 시 UUID 매핑용)
+        try {
+          await fetch('/api/notion/users', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-abs-token': notionToken,
+              'x-abs-dbs': JSON.stringify(provData.dbs)
+            },
+            body: JSON.stringify(currentUser)
+          });
+        } catch (e) {
+          console.error('Failed to create user in Notion:', e);
+        }
       }
 
       // 3. 완료 시 홈으로 리다이렉트
@@ -141,6 +156,11 @@ export default function SignupPage() {
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 placeholder="비밀번호 재입력"
               />
+              {confirmPassword && password !== confirmPassword && (
+                <p style={{ color: 'red', fontSize: '0.8rem', marginTop: '0.25rem' }}>
+                  비밀번호가 일치하지 않습니다.
+                </p>
+              )}
             </div>
           </div>
 

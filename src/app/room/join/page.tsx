@@ -21,7 +21,7 @@ export default function JoinRoomPage() {
     setUser(currentUser);
   }, [router]);
 
-  const handleJoin = (e: React.FormEvent) => {
+  const handleJoin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
     setError('');
@@ -32,7 +32,7 @@ export default function JoinRoomPage() {
       return;
     }
 
-    db.roomMembers.join({ room_id: room.id, user_id: user.id });
+    await db.roomMembers.join({ room_id: room.id, user_id: user.id });
     router.push(`/room/${room.id}`);
   };
 
